@@ -1,0 +1,12 @@
+*
+!requirements.txt
+!app.py
+!browser_inputs.py
+!pvt_engine.py
+!fit_engine.py
+!serve.py
+!templates/
+!templates/**
+!static/
+!static/**
+!Dockerfile

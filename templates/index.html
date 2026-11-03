@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PVT Correlation Explorer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('plotly_bundle') }}" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <div><p class="eyebrow">RESERVOIR FLUIDS</p><h1>PVT Correlation Explorer</h1>
+        <p class="subtitle">Compare oil correlations with your laboratory measurements.</p></div>
+      <span class="local-label"><span></span> Web workspace</span>
+    </header>
+
+    <section class="panel input-panel" aria-labelledby="input-heading">
+      <div class="section-heading"><h2 id="input-heading">Fluid properties &amp; pressure range</h2><span class="muted">Browser inputs</span></div>
+      <form id="pvt-form" data-calculate-url="{{ url_for('calculate') }}" data-validate-url="{{ url_for('validate_lab') }}">
+        <fieldset id="input-fields">
+          <div class="input-grid">
+            <div><label for="OilAPI">Oil API gravity</label><input id="OilAPI" name="OilAPI" type="number" step="any" value="35" required></div>
+            <div><label for="GasGravity">Gas Gravity</label><input id="GasGravity" name="GasGravity" type="number" step="any" min="0" value="0.75" required></div>
+            <div><label for="ReservoirTempF">Reservoir Temperature, &deg;F</label><input id="ReservoirTempF" name="ReservoirTempF" type="number" step="any" min="0" value="180" required></div>
+            <div><label for="BubblePointPsi">Bubble Point Pressure, psia</label><input id="BubblePointPsi" name="BubblePointPsi" type="number" step="any" min="0" value="2500" required></div>
+            <div><label for="PMin">Minimum Pressure, psia</label><input id="PMin" name="PMin" type="number" step="any" min="0" value="500" required></div>
+            <div><label for="PMax">Maximum Pressure, psia</label><input id="PMax" name="PMax" type="number" step="any" min="0" value="5000" required></div>
+            <div><label for="PStep">Pressure Step, psi</label><input id="PStep" name="PStep" type="number" step="any" min="0" value="100" required></div>
+          </div>
+          <label for="lab-data" class="paste-label">Paste Lab Data from Excel</label>
+          <p id="paste-help" class="help">Copy the cleaned table including these headers, then paste below. Leave missing measurements blank. An empty field shows raw curves only.</p>
+          <p class="column-hint"><code>Pressure_psia</code><code>Rs_scf_stb</code><code>Bo_rb_stb</code><code>Viscosity_cp</code></p>
+          <textarea id="lab-data" name="lab_text" rows="7" spellcheck="false" aria-describedby="paste-help paste-status" placeholder="Paste the header row and tab-separated laboratory values here"></textarea>
+          <p id="paste-status" class="help" role="status" aria-live="polite">No laboratory data pasted.</p>
+          <div class="input-actions">
+            <button type="submit" id="calculate-button">Calculate PVT</button>
+            <label class="calibration-toggle" for="calibrate"><input id="calibrate" type="checkbox" aria-describedby="calibration-help">Calibrate to Laboratory Data</label>
+          </div>
+          <p id="calibration-help" class="help">Fit a multiplier and shift independently to each curve using available laboratory measurements.</p>
+        </fieldset>
+      </form>
+      <div id="status" class="status neutral" role="status" aria-live="polite">Enter fluid properties and paste your laboratory table, then calculate.</div>
+    </section>
+
+    <section id="empty-state" class="empty-state">
+      <div class="empty-mark" aria-hidden="true">PVT</div>
+      <h2>Your fluid data is the starting point</h2>
+      <p>Enter controls and paste cleaned laboratory data to explore<br class="desktop-break"> solution GOR, oil formation volume factor and viscosity.</p>
+      <div class="empty-details"><span>7 calculation inputs</span><span>Paste directly from Excel</span><span>2 correlations</span></div>
+    </section>
+
+    <div id="results" hidden>
+      <section class="panel controls-panel" aria-labelledby="controls-heading">
+        <div class="section-heading"><h2 id="controls-heading">Current calculation inputs</h2><span class="muted">Calculated snapshot</span></div>
+        <dl class="controls" id="controls"></dl>
+        <div class="range-summary" id="range-summary"></div>
+      </section>
+
+      <section class="curves-section" aria-labelledby="curves-heading">
+        <div class="section-heading curves-heading">
+          <div><h2 id="curves-heading">Calculated curves &amp; laboratory data</h2><p class="help">Hover for values. Drag to zoom. Double-click to reset.</p></div>
+          <div class="legend" aria-label="Chart legend">
+            <span><i class="standing"></i>Standing</span><span><i class="vb"></i>Vasquez-Beggs</span><span><i class="lab"></i>Laboratory</span><span><i class="bubble"></i>Bubble point</span>
+          </div>
+        </div>
+        <div class="calibration-controls">
+          <div class="legend"><span><i class="raw"></i>Raw correlations (dashed)</span><span id="calibration-legend" hidden><i class="calibrated"></i>Calibrated (solid)</span></div>
+        </div>
+        <div class="chart-grid">
+          <article class="panel chart-card"><h3>Solution gas–oil ratio <span>Rs</span></h3><div id="rs-chart" class="chart" aria-label="Solution GOR in scf per STB versus pressure in psia"></div></article>
+          <article class="panel chart-card"><h3>Oil formation volume factor <span>Bo</span></h3><div id="bo-chart" class="chart" aria-label="Oil FVF in rb per STB versus pressure in psia"></div></article>
+          <article class="panel chart-card"><h3>Oil viscosity <span>μo</span></h3><div id="viscosity-chart" class="chart" aria-label="Oil viscosity in cP versus pressure in psia"></div></article>
+        </div>
+        <p class="help viscosity-note">Viscosity uses Beggs-Robinson with the solution GOR from each correlation.</p>
+        <p id="lab-note" class="lab-note" hidden></p>
+      </section>
+
+      <section id="calibration-summary" class="panel data-panel calibration-panel" aria-labelledby="calibration-heading" hidden>
+        <div class="section-heading"><h2 id="calibration-heading">Calibration summary</h2><span class="muted">Y calibrated = A × Y calculated + B</span></div>
+        <p class="help">Errors are RMSE in the property units, using the same measured points before and after fitting. Shift uses the property units; multiplier is dimensionless. Calculated curves are linearly interpolated to lab pressures; points outside the curve range are excluded.</p>
+        <p id="calibration-notes" class="lab-note" role="status" hidden></p>
+        <div id="calibration-table" class="table-scroll" tabindex="0"></div>
+      </section>
+
+      <section class="panel data-panel" aria-labelledby="data-heading">
+        <div class="section-heading"><h2 id="data-heading">Data tables</h2><span id="row-count" class="muted"></span></div>
+        <div class="export-actions" aria-label="Results export">
+          <button type="button" id="export-results" class="secondary">Export results CSV</button>
+          <button type="button" id="export-calibration" class="secondary" hidden>Export calibration CSV</button>
+          <button type="button" id="export-json" class="secondary">Export full results JSON</button>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Results tables">
+          <button type="button" id="calculated-tab" class="tab active" role="tab" aria-selected="true" aria-controls="calculated-table">Calculated results</button>
+          <button type="button" id="lab-tab" class="tab" role="tab" aria-selected="false" aria-controls="lab-table" tabindex="-1">Laboratory data</button>
+        </div>
+        <div id="calculated-table" class="table-scroll" role="tabpanel" aria-labelledby="calculated-tab" tabindex="0"></div>
+        <div id="lab-table" class="table-scroll" role="tabpanel" aria-labelledby="lab-tab" tabindex="0" hidden></div>
+      </section>
+    </div>
+    <footer>Inputs and pasted measurements are processed on the server for this calculation. No file access or upload is required; data is not saved by the application.</footer>
+  </main>
+</body>
+</html>
